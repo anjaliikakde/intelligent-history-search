@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>History Search</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <span class="header__title">History Search</span>
+    <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Settings">
+      &#9881;
+    </button>
+  </header>
+
+  <!-- Search bar -->
+  <div class="search-bar">
+    <input
+      id="search-input"
+      class="search-input"
+      type="text"
+      placeholder="Search your history..."
+      autocomplete="off"
+      spellcheck="false"
+      autofocus
+    />
+    <button class="search-btn" id="btn-search" aria-label="Search">&#128269;</button>
+  </div>
+
+  <!-- Status bar — shows "Tracking paused", errors, etc. -->
+  <div class="status-bar" id="status-bar" hidden></div>
+
+  <!-- Results list -->
+  <ul class="results" id="results" role="list" aria-label="Search results"></ul>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="empty-state" hidden>
+    <p>No results found.</p>
+    <p class="empty-state__hint">Try different keywords or visit more pages.</p>
+  </div>
+
+  <!-- Settings panel (hidden by default) -->
+  <div class="settings-panel" id="settings-panel" hidden>
+    <h2 class="settings-panel__title">Settings</h2>
+
+    <div class="setting-row">
+      <label class="setting-label" for="toggle-pause">Pause tracking</label>
+      <label class="toggle" aria-label="Pause tracking">
+        <input type="checkbox" id="toggle-pause" />
+        <span class="toggle__track"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <label class="setting-label" for="select-expiry">Auto-delete after</label>
+      <select id="select-expiry" class="select">
+        <option value="30">30 days</option>
+        <option value="90" selected>90 days</option>
+        <option value="180">180 days</option>
+        <option value="365">1 year</option>
+        <option value="0">Never</option>
+      </select>
+    </div>
+
+    <div class="setting-row setting-row--danger">
+      <label class="setting-label">Clear all history</label>
+      <button class="btn btn--danger" id="btn-clear">Clear</button>
+    </div>
+
+    <div class="setting-row">
+      <label class="setting-label">Host status</label>
+      <span class="badge" id="host-status-badge">Checking...</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

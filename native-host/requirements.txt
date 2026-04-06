@@ -1,0 +1,83 @@
+# browser-history-search — native host dependencies
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# First-time model download (run once after install):
+#   python -c "from embedder import Embedder; Embedder.download_model()"
+
+# ---------------------------------------------------------------------------
+# Direct dependencies
+# ---------------------------------------------------------------------------
+
+# Vector store — Qdrant Edge Python bindings
+qdrant-edge-py
+
+# On-device embeddings — ONNX backend, no GPU needed
+fastembed
+
+# ---------------------------------------------------------------------------
+# fastembed core dependencies
+# ---------------------------------------------------------------------------
+
+# Model hub — download + cache embedding models
+huggingface-hub
+
+# Logging — used internally by fastembed
+loguru
+
+# Hashing — used for sparse vector support
+mmh3
+
+# Numerical operations — vector output
+numpy
+
+# ONNX model inference engine
+onnxruntime
+
+# Image support — required for multimodal models
+pillow
+
+# Text stemming — sparse vector processing
+py-rust-stemmers
+
+# HTTP requests — model download
+requests
+
+# Tokenization — text preprocessing
+tokenizers
+
+# Progress bars — download progress display
+tqdm
+
+# ---------------------------------------------------------------------------
+# huggingface-hub additional dependencies
+# ---------------------------------------------------------------------------
+
+# File locking — prevents concurrent download conflicts
+filelock
+
+# Filesystem abstraction
+fsspec
+
+# HTTP client
+httpx
+
+# CLI framework
+typer
+
+# ---------------------------------------------------------------------------
+# Standard library modules (no installation required)
+# ---------------------------------------------------------------------------
+# json
+# struct
+# sys
+# os
+# threading
+# time
+# hashlib
+# logging
+# pathlib
+# dataclasses
+# urllib.parse
+# shutil

@@ -1,0 +1,43 @@
+# Virtual environment
+native-host/.venv/
+.venv/
+venv/
+
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated install files — machine-specific paths + extension ID
+native-host/launch_host.sh
+native-host/launch_host.bat
+native-host/com.historysearch.host.json
+native-host-manifest/com.historysearch.host.json
+
+# User data — NEVER push
+*.log
+logs/
+qdrant-edge/
+models/
+settings.json
+
+# OS files
+.DS_Store
+.DS_Store?
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
