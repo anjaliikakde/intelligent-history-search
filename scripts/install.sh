@@ -5,7 +5,7 @@
 # 1. Creates a Python virtual environment
 # 2. Installs all dependencies
 # 3. Downloads the embedding model locally
-# 4. Registers the native messaging host with Chrome
+# 4. Registers the native messaging host with Chrome, Chromium, AND Edge
 # 5. Prompts user to enter their extension ID
 #
 # Usage:
@@ -21,12 +21,12 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # no color
+NC='\033[0m'
 
-log_info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
-log_ok()      { echo -e "${GREEN}[OK]${NC}    $*"; }
-log_warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-log_error()   { echo -e "${RED}[ERROR]${NC} $*"; }
+log_info()  { echo -e "${BLUE}[INFO]${NC}  $*"; }
+log_ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -34,20 +34,21 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HOST_DIR="${PROJECT_ROOT}/native-host"
-MANIFEST_SRC="${PROJECT_ROOT}/native-host-manifest/com.historysearch.host.json"
 VENV_DIR="${HOST_DIR}/.venv"
 HOST_SCRIPT="${HOST_DIR}/host.py"
+MANIFEST_NAME="com.historysearch.host.json"
 
-# Chrome native messaging host directories per platform
+# Native messaging directories per browser per platform
 if [[ "$OSTYPE" == "darwin"* ]]; then
   CHROME_NM_DIR="${HOME}/Library/Application Support/Google/Chrome/NativeMessagingHosts"
   CHROMIUM_NM_DIR="${HOME}/Library/Application Support/Chromium/NativeMessagingHosts"
+  EDGE_NM_DIR="${HOME}/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
 else
+  # Linux
   CHROME_NM_DIR="${HOME}/.config/google-chrome/NativeMessagingHosts"
   CHROMIUM_NM_DIR="${HOME}/.config/chromium/NativeMessagingHosts"
+  EDGE_NM_DIR="${HOME}/.config/microsoft-edge/NativeMessagingHosts"
 fi
-
-MANIFEST_DEST="${CHROME_NM_DIR}/com.historysearch.host.json"
 
 # ---------------------------------------------------------------------------
 # Check prerequisites
@@ -60,12 +61,10 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-log_info "Python version: ${PYTHON_VERSION}"
-
-REQUIRED_MINOR=9
 ACTUAL_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
-if [[ "$ACTUAL_MINOR" -lt "$REQUIRED_MINOR" ]]; then
-  log_error "Python 3.${REQUIRED_MINOR}+ required. Found Python ${PYTHON_VERSION}."
+
+if [[ "$ACTUAL_MINOR" -lt 9 ]]; then
+  log_error "Python 3.9+ required. Found Python ${PYTHON_VERSION}."
   exit 1
 fi
 
@@ -83,14 +82,13 @@ else
   log_ok "Virtual environment created"
 fi
 
-# Activate venv
 source "${VENV_DIR}/bin/activate"
 
 # ---------------------------------------------------------------------------
 # Install dependencies
 # ---------------------------------------------------------------------------
 log_info "Installing Python dependencies..."
-pip install --quiet --upgrade pip
+python3 -m pip install --quiet --upgrade pip
 pip install --quiet -r "${HOST_DIR}/requirements.txt"
 log_ok "Dependencies installed"
 
@@ -98,13 +96,6 @@ log_ok "Dependencies installed"
 # Download embedding model (one-time, offline after this)
 # ---------------------------------------------------------------------------
 log_info "Downloading embedding model (one-time, ~80MB)..."
-python3 - <<'PYTHON'
-import sys
-sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0] if '/' in sys.argv[0] else '.')
-import os, sys
-# Add host dir to path
-host_dir = os.path.join(os.path.dirname(os.path.abspath(__file__ if '__file__' in dir() else '.')))
-PYTHON
 
 cd "${HOST_DIR}"
 python3 -c "from embedder import Embedder; ok = Embedder.download_model(); exit(0 if ok else 1)"
@@ -114,9 +105,9 @@ log_ok "Embedding model downloaded"
 # Get extension ID from user
 # ---------------------------------------------------------------------------
 echo ""
-log_info "To complete setup, you need your Chrome Extension ID."
+log_info "To complete setup, you need your Extension ID."
 log_info "Steps:"
-log_info "  1. Open Chrome → chrome://extensions"
+log_info "  1. Open Chrome → chrome://extensions  OR  Edge → edge://extensions"
 log_info "  2. Enable 'Developer mode' (top right toggle)"
 log_info "  3. Click 'Load unpacked' → select: ${PROJECT_ROOT}/extension"
 log_info "  4. Copy the Extension ID shown under your extension name"
@@ -128,48 +119,35 @@ if [[ -z "${EXTENSION_ID}" ]]; then
   exit 1
 fi
 
-# Basic format check — Chrome IDs are 32 lowercase letters
+# Basic format check — Chrome/Edge IDs are 32 lowercase letters
 if ! echo "${EXTENSION_ID}" | grep -qE '^[a-z]{32}$'; then
   log_warn "Extension ID format looks unusual (expected 32 lowercase letters)."
   log_warn "Proceeding anyway — double-check if extension doesn't connect."
 fi
 
 # ---------------------------------------------------------------------------
-# Write native messaging manifest
+# Write launcher script
+# Native messaging "path" must be an executable — not a .py file directly.
+# This launcher invokes venv python with host.py.
 # ---------------------------------------------------------------------------
-log_info "Installing native messaging manifest..."
+log_info "Writing launcher script..."
 
-mkdir -p "${CHROME_NM_DIR}"
-
-# Get absolute path to host.py with venv python
 PYTHON_PATH="${VENV_DIR}/bin/python3"
-
-# Write manifest with real paths and extension ID
-cat > "${MANIFEST_DEST}" <<JSON
-{
-  "name": "com.historysearch.host",
-  "description": "History Search native messaging host",
-  "path": "${PYTHON_PATH}",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://${EXTENSION_ID}/"
-  ]
-}
-JSON
-
-# Note: Chrome native messaging "path" must point to the executable,
-# and the executable must have the script path as first argument.
-# For Python scripts we use a wrapper approach — write a small launcher.
-
 LAUNCHER="${HOST_DIR}/launch_host.sh"
-cat > "${LAUNCHER}" <<LAUNCHER
+
+cat > "${LAUNCHER}" <<LAUNCHER_SCRIPT
 #!/usr/bin/env bash
 exec "${PYTHON_PATH}" "${HOST_SCRIPT}" "\$@"
-LAUNCHER
-chmod +x "${LAUNCHER}"
+LAUNCHER_SCRIPT
 
-# Update manifest path to point to launcher
-cat > "${MANIFEST_DEST}" <<JSON
+chmod +x "${LAUNCHER}"
+log_ok "Launcher written: ${LAUNCHER}"
+
+# ---------------------------------------------------------------------------
+# Build manifest JSON content
+# Same content for all browsers — only the destination directory differs
+# ---------------------------------------------------------------------------
+MANIFEST_CONTENT=$(cat <<JSON
 {
   "name": "com.historysearch.host",
   "description": "History Search native messaging host",
@@ -180,15 +158,36 @@ cat > "${MANIFEST_DEST}" <<JSON
   ]
 }
 JSON
+)
 
-log_ok "Manifest installed at: ${MANIFEST_DEST}"
+# ---------------------------------------------------------------------------
+# Helper — install manifest for one browser
+# Skips silently if that browser is not installed
+# ---------------------------------------------------------------------------
+install_manifest() {
+  local browser_name="$1"
+  local nm_dir="$2"
 
-# Also install for Chromium if it exists
-if [[ -d "$(dirname "${CHROMIUM_NM_DIR}")" ]]; then
-  mkdir -p "${CHROMIUM_NM_DIR}"
-  cp "${MANIFEST_DEST}" "${CHROMIUM_NM_DIR}/com.historysearch.host.json"
-  log_ok "Manifest also installed for Chromium"
-fi
+  # Check if browser's parent config directory exists
+  # If not — browser is not installed, skip
+  if [[ ! -d "$(dirname "${nm_dir}")" ]]; then
+    log_warn "${browser_name} not found on this system — skipping"
+    return
+  fi
+
+  mkdir -p "${nm_dir}"
+  echo "${MANIFEST_CONTENT}" > "${nm_dir}/${MANIFEST_NAME}"
+  log_ok "Registered for ${browser_name}: ${nm_dir}/${MANIFEST_NAME}"
+}
+
+# ---------------------------------------------------------------------------
+# Register for all supported browsers
+# ---------------------------------------------------------------------------
+log_info "Registering native messaging host..."
+
+install_manifest "Chrome"   "${CHROME_NM_DIR}"
+install_manifest "Chromium" "${CHROMIUM_NM_DIR}"
+install_manifest "Edge"     "${EDGE_NM_DIR}"
 
 # ---------------------------------------------------------------------------
 # Done
@@ -196,11 +195,13 @@ fi
 echo ""
 log_ok "======================================"
 log_ok "  History Search installed!"
+log_ok "  Supported: Chrome, Chromium, Edge"
 log_ok "======================================"
 echo ""
 log_info "Next steps:"
-log_info "  1. Reload your extension in chrome://extensions (click the refresh icon)"
-log_info "  2. Click the extension icon in Chrome toolbar"
+log_info "  1. Reload extension: chrome://extensions or edge://extensions"
+log_info "     (click the refresh icon on your extension)"
+log_info "  2. Click the extension icon in the browser toolbar"
 log_info "  3. Visit some pages — they will be indexed automatically"
 log_info "  4. Search your history semantically from the popup"
 echo ""

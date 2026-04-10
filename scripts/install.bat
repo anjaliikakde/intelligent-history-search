@@ -5,7 +5,7 @@
 :: 1. Creates a Python virtual environment
 :: 2. Installs all dependencies
 :: 3. Downloads the embedding model locally
-:: 4. Registers the native messaging host in Windows Registry
+:: 4. Registers the native messaging host for Chrome, Chromium, AND Edge
 :: 5. Prompts user to enter their extension ID
 ::
 :: Usage: Right-click install.bat → Run as Administrator
@@ -18,7 +18,7 @@ setlocal EnableDelayedExpansion
 :: ---------------------------------------------------------------------------
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%.."
-:: Resolve to absolute path
+
 pushd "%PROJECT_ROOT%"
 set "PROJECT_ROOT=%CD%"
 popd
@@ -28,9 +28,11 @@ set "VENV_DIR=%HOST_DIR%\.venv"
 set "HOST_SCRIPT=%HOST_DIR%\host.py"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
 set "LAUNCHER=%HOST_DIR%\launch_host.bat"
+set "MANIFEST_PATH=%HOST_DIR%\com.historysearch.host.json"
 
 echo.
 echo [INFO] History Search - Windows Installer
+echo [INFO] Supports: Chrome, Chromium, Edge
 echo [INFO] Project root: %PROJECT_ROOT%
 echo.
 
@@ -69,12 +71,12 @@ if exist "%VENV_DIR%" (
 
 :: ---------------------------------------------------------------------------
 :: Install dependencies
+:: Use python -m pip instead of pip.exe directly — avoids Windows venv issues
 :: ---------------------------------------------------------------------------
 echo [INFO] Installing Python dependencies...
 
-@REM "%VENV_DIR%\Scripts\pip.exe" install --quiet --upgrade pip
 "%VENV_DIR%\Scripts\python.exe" -m pip install --quiet --upgrade pip
-"%VENV_DIR%\Scripts\pip.exe" install --quiet -r "%HOST_DIR%\requirements.txt"
+"%VENV_DIR%\Scripts\python.exe" -m pip install --quiet -r "%HOST_DIR%\requirements.txt"
 
 if errorlevel 1 (
   echo [ERROR] Dependency installation failed
@@ -102,9 +104,10 @@ echo [OK]   Embedding model downloaded
 :: Get Extension ID
 :: ---------------------------------------------------------------------------
 echo.
-echo [INFO] To complete setup, you need your Chrome Extension ID.
+echo [INFO] To complete setup, you need your Extension ID.
 echo [INFO] Steps:
 echo [INFO]   1. Open Chrome -^> chrome://extensions
+echo [INFO]      OR Edge     -^> edge://extensions
 echo [INFO]   2. Enable 'Developer mode' (top right toggle)
 echo [INFO]   3. Click 'Load unpacked' -^> select: %PROJECT_ROOT%\extension
 echo [INFO]   4. Copy the Extension ID shown under your extension name
@@ -119,9 +122,8 @@ if "%EXTENSION_ID%"=="" (
 
 :: ---------------------------------------------------------------------------
 :: Write launcher batch file
-:: The native messaging manifest "path" on Windows must point to an .exe
-:: or a .bat — not directly to a .py file.
-:: We use a .bat launcher that calls our venv python with host.py
+:: Native messaging "path" on Windows must be an .exe or .bat
+:: This launcher calls venv python with host.py
 :: ---------------------------------------------------------------------------
 echo [INFO] Writing launcher script...
 
@@ -134,15 +136,14 @@ echo [OK]   Launcher written: %LAUNCHER%
 
 :: ---------------------------------------------------------------------------
 :: Write native messaging manifest JSON
+:: Use PowerShell to handle path escaping cleanly
 :: ---------------------------------------------------------------------------
-set "MANIFEST_PATH=%HOST_DIR%\com.historysearch.host.json"
+echo [INFO] Writing native messaging manifest...
 
-:: JSON requires forward slashes or escaped backslashes
-:: Use PowerShell to write it cleanly
 powershell -NoProfile -Command ^
   "$launcher = '%LAUNCHER%' -replace '\\\\', '\\\\';" ^
   "$ext_id = '%EXTENSION_ID%';" ^
-  "$json = @{" ^
+  "$json = [ordered]@{" ^
   "  name = 'com.historysearch.host';" ^
   "  description = 'History Search native messaging host';" ^
   "  path = $launcher;" ^
@@ -159,27 +160,43 @@ if errorlevel 1 (
 echo [OK]   Manifest written: %MANIFEST_PATH%
 
 :: ---------------------------------------------------------------------------
-:: Register in Windows Registry
-:: Chrome reads native messaging hosts from:
-:: HKCU\Software\Google\Chrome\NativeMessagingHosts\<host_name>
-:: The default value = absolute path to the manifest JSON file
+:: Register in Windows Registry for all supported browsers
+::
+:: Each browser reads from its own Registry key:
+::   Chrome:   HKCU\Software\Google\Chrome\NativeMessagingHosts\
+::   Chromium: HKCU\Software\Chromium\NativeMessagingHosts\
+::   Edge:     HKCU\Software\Microsoft\Edge\NativeMessagingHosts\
+::
+:: The default value of each key = absolute path to the manifest JSON
 :: ---------------------------------------------------------------------------
 echo [INFO] Registering native messaging host in Windows Registry...
 
-set "REG_KEY=HKCU\Software\Google\Chrome\NativeMessagingHosts\com.historysearch.host"
-
-reg add "%REG_KEY%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul
-
+:: Chrome
+set "REG_CHROME=HKCU\Software\Google\Chrome\NativeMessagingHosts\com.historysearch.host"
+reg add "%REG_CHROME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul
 if errorlevel 1 (
-  echo [ERROR] Registry write failed. Try running as Administrator.
-  pause
-  exit /b 1
+  echo [WARN] Chrome registry write failed - Chrome may not be installed
+) else (
+  echo [OK]   Registered for Chrome
 )
-echo [OK]   Registry key set: %REG_KEY%
 
-:: Also register for Chromium
-set "REG_KEY_CR=HKCU\Software\Chromium\NativeMessagingHosts\com.historysearch.host"
-reg add "%REG_KEY_CR%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
+:: Chromium
+set "REG_CHROMIUM=HKCU\Software\Chromium\NativeMessagingHosts\com.historysearch.host"
+reg add "%REG_CHROMIUM%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
+if errorlevel 1 (
+  echo [WARN] Chromium registry write failed - Chromium may not be installed
+) else (
+  echo [OK]   Registered for Chromium
+)
+
+:: Edge — Chromium-based Edge uses its own registry path
+set "REG_EDGE=HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.historysearch.host"
+reg add "%REG_EDGE%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
+if errorlevel 1 (
+  echo [WARN] Edge registry write failed - Edge may not be installed
+) else (
+  echo [OK]   Registered for Edge
+)
 
 :: ---------------------------------------------------------------------------
 :: Done
@@ -187,11 +204,15 @@ reg add "%REG_KEY_CR%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
 echo.
 echo [OK]   ======================================
 echo [OK]     History Search installed!
+echo [OK]     Supported: Chrome, Chromium, Edge
 echo [OK]   ======================================
 echo.
 echo [INFO] Next steps:
-echo [INFO]   1. Reload your extension in chrome://extensions
-echo [INFO]   2. Click the extension icon in Chrome toolbar
+echo [INFO]   1. Reload extension:
+echo [INFO]      Chrome -^> chrome://extensions
+echo [INFO]      Edge   -^> edge://extensions
+echo [INFO]      (click the refresh icon on your extension)
+echo [INFO]   2. Click the extension icon in the browser toolbar
 echo [INFO]   3. Visit some pages - they will be indexed automatically
 echo [INFO]   4. Search your history semantically from the popup
 echo.
