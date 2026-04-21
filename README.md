@@ -22,7 +22,7 @@ Everything runs **on your device**. No cloud. No API keys. No data leaving your 
 
 | Search Interface | Results View |
 |:---:|:---:|
-| ![Search UI](assets/search_ui.png) | ![Results](assets/results.png) |
+| <img width="978" height="425" alt="search_ui" src="https://github.com/user-attachments/assets/37a9d640-1697-4aa5-9e02-c92bd775d97f" /> | <img width="384" height="511" alt="results" src="https://github.com/user-attachments/assets/fb8847f5-94cf-44fa-8d7b-b72e61a286c9" /> |
 
 **Example queries that work:**
 - `"machine learning practice problems"` → finds a LeetCode-style ML site you visited
